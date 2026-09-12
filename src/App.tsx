@@ -1,32 +1,51 @@
 import React, { useState, useRef } from 'react';
-import { Upload, RotateCcw, Sparkles, AlertCircle, Eye, Activity, Wind, Thermometer, Gauge, CloudRain } from 'lucide-react';
-import { CycloneParameters, PredictionResult, ImageAnalysisData } from './types';
-import { extractImageFeatures, analyzeCyclone } from './services/predictionService';
+import {
+  Upload,
+  RotateCcw,
+  Sparkles,
+  Eye,
+  Activity,
+  Compass,
+  MapPin,
+  Clock,
+  Navigation,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react';
+import {
+  CycloneParameters,
+  PredictionResult,
+  ImageAnalysisData,
+  ImageValidationResult,
+} from './types';
+import {
+  validateCycloneImage,
+  extractImageFeatures,
+  analyzeCyclone,
+} from './services/predictionService';
 
-// Three distinct satellite presets for one-click testing
+// Quick target region suggestion chips
+const POPULAR_TARGET_REGIONS = [
+  'Visakhapatnam',
+  'Puri',
+  'Chennai',
+  'Kolkata',
+  'Paradip',
+];
+
+// Test presets representing distinct image types for instant testing
 const SCENARIO_PRESETS = [
   {
-    id: 'scenario-1',
-    name: 'Scenario 1: Non-Cyclone / Weak Disturbance',
-    label: 'Scenario 1 (Normal / Weak)',
-    filename: 'satellite_non_cyclone_normal.svg',
-    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="400" fill="%230f1c2b"/><circle cx="200" cy="200" r="180" fill="%2314273b"/><path d="M40,160 Q120,130 200,160 T360,160" fill="none" stroke="%23334d6b" stroke-width="6"/><path d="M60,240 Q150,220 240,240 T370,230" fill="none" stroke="%23334d6b" stroke-width="4"/><ellipse cx="140" cy="180" rx="35" ry="15" fill="%23718096" opacity="0.4"/><ellipse cx="270" cy="220" rx="45" ry="18" fill="%23718096" opacity="0.35"/><text x="200" y="370" font-family="sans-serif" font-size="12" fill="%2394a3b8" text-anchor="middle">CALM SEA / NON-CYCLONIC SCAN</text></svg>`,
-    params: {
-      windSpeed: '24',
-      seaSurfaceTemperature: '26.2',
-      atmosphericPressure: '1010',
-      windDirection: '95',
-      latitude: '11.5',
-      longitude: '83.2',
-      rainfall: '14',
-    },
-  },
-  {
-    id: 'scenario-2',
-    name: 'Scenario 2: Developing Cyclonic Storm',
-    label: 'Scenario 2 (Moderate Cyclone)',
+    id: 'cyclone-moderate',
+    name: 'Developing Cyclonic Storm',
+    label: 'Valid Cyclone: Moderate Storm',
+    type: 'cyclone',
     filename: 'satellite_cyclone_developing.svg',
-    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="400" fill="%2313202e"/><circle cx="200" cy="200" r="170" fill="%231c2e42"/><path d="M200,80 A120,120 0 0,1 320,200 A120,120 0 0,1 200,320 A60,60 0 0,1 140,260 A60,60 0 0,1 200,200" fill="none" stroke="%23CBD5E1" stroke-width="32" stroke-linecap="round"/><path d="M200,110 A90,90 0 0,1 290,200 A90,90 0 0,1 200,290" fill="none" stroke="%23E2E8F0" stroke-width="18" stroke-linecap="round"/><circle cx="200" cy="200" r="16" fill="%2313202e"/><text x="200" y="370" font-family="sans-serif" font-size="12" fill="%23E2E8F0" text-anchor="middle">DEVELOPING VORTEX SCAN</text></svg>`,
+    // Realistic multi-quadrant vortex cloud scan on deep ocean
+    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="400" fill="%230d1a29"/><circle cx="200" cy="200" r="175" fill="%2313263a"/><path d="M200,70 A130,130 0 0,1 330,200 A130,130 0 0,1 200,330 A80,80 0 0,1 120,250 A80,80 0 0,1 200,190" fill="none" stroke="%23CBD5E1" stroke-width="36" stroke-linecap="round"/><path d="M200,105 A95,95 0 0,1 295,200 A95,95 0 0,1 200,295 A50,50 0 0,1 150,220" fill="none" stroke="%23E2E8F0" stroke-width="24" stroke-linecap="round"/><circle cx="200" cy="200" r="28" fill="%230d1a29"/><text x="200" y="375" font-family="sans-serif" font-size="12" fill="%23E2E8F0" text-anchor="middle">SATELLITE SCAN: CYCLONE VORTEX</text></svg>`,
     params: {
       windSpeed: '75',
       seaSurfaceTemperature: '28.8',
@@ -35,14 +54,17 @@ const SCENARIO_PRESETS = [
       latitude: '14.8',
       longitude: '86.5',
       rainfall: '85',
+      targetRegion: 'Visakhapatnam',
     },
   },
   {
-    id: 'scenario-3',
-    name: 'Scenario 3: Intense Severe Cyclone',
-    label: 'Scenario 3 (Intense Cyclone)',
+    id: 'cyclone-severe',
+    name: 'Intense Severe Cyclone',
+    label: 'Valid Cyclone: Severe with Eye',
+    type: 'cyclone',
     filename: 'satellite_cyclone_severe_eye.svg',
-    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="400" fill="%230c141f"/><circle cx="200" cy="200" r="185" fill="%23182638"/><path d="M200,50 A150,150 0 0,1 350,200 A150,150 0 0,1 200,350 A150,150 0 0,1 50,200 A150,150 0 0,1 200,50" fill="none" stroke="%23F8FAFC" stroke-width="48" stroke-linecap="round"/><path d="M200,90 A110,110 0 0,1 310,200 A110,110 0 0,1 200,310 A110,110 0 0,1 90,200" fill="none" stroke="%23FFFFFF" stroke-width="36" stroke-linecap="round"/><circle cx="200" cy="200" r="48" fill="%23E98272" opacity="0.85"/><circle cx="200" cy="200" r="22" fill="%230c141f"/><circle cx="200" cy="200" r="6" fill="%23FFFFFF"/><text x="200" y="370" font-family="sans-serif" font-size="12" fill="%23FFFFFF" text-anchor="middle" font-weight="bold">INTENSE EYEWALL VORTEX</text></svg>`,
+    // Intense eyewall vortex with spiral arms spanning all 4 quadrants
+    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="400" fill="%230a1320"/><circle cx="200" cy="200" r="185" fill="%23112235"/><path d="M200,50 A150,150 0 0,1 350,200 A150,150 0 0,1 200,350 A150,150 0 0,1 50,200 A150,150 0 0,1 200,50" fill="none" stroke="%23F8FAFC" stroke-width="46" stroke-linecap="round"/><path d="M200,90 A110,110 0 0,1 310,200 A110,110 0 0,1 200,310 A110,110 0 0,1 90,200" fill="none" stroke="%23FFFFFF" stroke-width="34" stroke-linecap="round"/><circle cx="200" cy="200" r="46" fill="%23E98272" opacity="0.8"/><circle cx="200" cy="200" r="22" fill="%230a1320"/><circle cx="200" cy="200" r="6" fill="%23FFFFFF"/><text x="200" y="375" font-family="sans-serif" font-size="12" fill="%23FFFFFF" text-anchor="middle" font-weight="bold">SATELLITE SCAN: SEVERE EYEWALL</text></svg>`,
     params: {
       windSpeed: '160',
       seaSurfaceTemperature: '30.5',
@@ -51,6 +73,45 @@ const SCENARIO_PRESETS = [
       latitude: '18.2',
       longitude: '89.1',
       rainfall: '220',
+      targetRegion: 'Puri',
+    },
+  },
+  {
+    id: 'photo-building',
+    name: 'Normal Photo (Building & City)',
+    label: 'Non-Cyclone: Building Photo',
+    type: 'non-cyclone',
+    filename: 'photo_building_city.svg',
+    // Everyday photograph of an urban building with sky horizon, sharp angles, and warm colors
+    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="200" fill="%2338bdf8"/><rect y="200" width="400" height="200" fill="%23475569"/><rect x="80" y="100" width="140" height="220" fill="%23b91c1c"/><rect x="240" y="140" width="100" height="180" fill="%23d97706"/><rect x="100" y="120" width="30" height="40" fill="%23fef08a"/><rect x="160" y="120" width="30" height="40" fill="%23fef08a"/><rect x="100" y="180" width="30" height="40" fill="%23fef08a"/><rect x="160" y="180" width="30" height="40" fill="%23fef08a"/><circle cx="60" cy="60" r="30" fill="%23facc15"/><text x="200" y="370" font-family="sans-serif" font-size="12" fill="%23ffffff" text-anchor="middle" font-weight="bold">ORDINARY PHOTO: CITY BUILDING</text></svg>`,
+    params: {
+      windSpeed: '15',
+      seaSurfaceTemperature: '25.0',
+      atmosphericPressure: '1013',
+      windDirection: '90',
+      latitude: '28.6',
+      longitude: '77.2',
+      rainfall: '0',
+      targetRegion: 'Visakhapatnam',
+    },
+  },
+  {
+    id: 'photo-landscape',
+    name: 'Non-Cyclone (Calm Sea / Landscape)',
+    label: 'Non-Cyclone: Calm Sea / Sky',
+    type: 'non-cyclone',
+    filename: 'photo_calm_sea.svg',
+    // Horizon photo with no circular cloud vortex structure
+    svgData: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"><rect width="400" height="220" fill="%230284c7"/><rect y="220" width="400" height="180" fill="%230369a1"/><ellipse cx="200" cy="80" rx="140" ry="25" fill="%23f1f5f9" opacity="0.6"/><ellipse cx="120" cy="140" rx="80" ry="18" fill="%23f1f5f9" opacity="0.5"/><text x="200" y="370" font-family="sans-serif" font-size="12" fill="%23e2e8f0" text-anchor="middle">CALM HORIZON (NO VORTEX)</text></svg>`,
+    params: {
+      windSpeed: '18',
+      seaSurfaceTemperature: '26.0',
+      atmosphericPressure: '1011',
+      windDirection: '80',
+      latitude: '11.0',
+      longitude: '82.0',
+      rainfall: '5',
+      targetRegion: 'Chennai',
     },
   },
 ];
@@ -63,11 +124,14 @@ const INITIAL_PARAMETERS: CycloneParameters = {
   latitude: '14.8',
   longitude: '86.5',
   rainfall: '85',
+  targetRegion: 'Visakhapatnam',
 };
 
 export default function App() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageName, setImageName] = useState<string>('');
+  const [validationResult, setValidationResult] = useState<ImageValidationResult | null>(null);
+  const [isValidating, setIsValidating] = useState<boolean>(false);
   const [extractedFeatures, setExtractedFeatures] = useState<ImageAnalysisData | null>(null);
   const [parameters, setParameters] = useState<CycloneParameters>(INITIAL_PARAMETERS);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
@@ -75,13 +139,49 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const validationSectionRef = useRef<HTMLDivElement | null>(null);
 
-  // Process and extract features whenever an image is loaded
-  const processImage = async (dataUrl: string, name: string) => {
+  // Mandatory First Step: Cyclone Image Validation
+  const processAndValidateImage = async (dataUrl: string, name: string) => {
     setImagePreview(dataUrl);
     setImageName(name);
-    const features = await extractImageFeatures(dataUrl);
-    setExtractedFeatures(features);
+    setIsValidating(true);
+    setValidationResult({
+      isValidCycloneImage: false,
+      status: 'checking',
+      message: 'Image Analysis: Checking...',
+      confidenceScore: 0,
+      features: {
+        brightness: 0,
+        contrast: 0,
+        cloudCoverage: 0,
+        vortexSymmetry: 0,
+        satelliteLikelihood: 0,
+        dimensions: 'Checking',
+      },
+    });
+
+    // Clear any previous prediction whenever a new image is uploaded
+    setPrediction(null);
+    setExtractedFeatures(null);
+
+    try {
+      // Step 1: Run separate deterministic validation function
+      const valResult = await validateCycloneImage(dataUrl);
+      setValidationResult(valResult);
+
+      if (valResult.isValidCycloneImage) {
+        // Step 2: Only if validated, extract optical features for prediction engine
+        const features = await extractImageFeatures(dataUrl);
+        setExtractedFeatures(features);
+      } else {
+        // If non-cyclone, clear prediction state completely
+        setPrediction(null);
+        setExtractedFeatures(null);
+      }
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   // Handle local file selection
@@ -91,7 +191,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const dataUrl = event.target?.result as string;
-        await processImage(dataUrl, file.name);
+        await processAndValidateImage(dataUrl, file.name);
       };
       reader.readAsDataURL(file);
     }
@@ -105,7 +205,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const dataUrl = event.target?.result as string;
-        await processImage(dataUrl, file.name);
+        await processAndValidateImage(dataUrl, file.name);
       };
       reader.readAsDataURL(file);
     }
@@ -113,10 +213,8 @@ export default function App() {
 
   // Select a preset scenario
   const handleSelectScenario = async (scenario: typeof SCENARIO_PRESETS[0]) => {
-    await processImage(scenario.svgData, scenario.filename);
     setParameters(scenario.params);
-    // Clear previous prediction when switching scenarios so user clicks Predict
-    setPrediction(null);
+    await processAndValidateImage(scenario.svgData, scenario.filename);
   };
 
   // Handle input changes
@@ -127,24 +225,29 @@ export default function App() {
     }));
   };
 
-  // Run dynamic analysis and prediction
+  // Run dynamic analysis and prediction (Only permitted if validation passed)
   const handlePredict = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard: Prevent prediction if no image uploaded or image failed validation
+    if (!validationResult || !validationResult.isValidCycloneImage) {
+      validationSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     setIsAnalyzing(true);
 
     try {
-      // Use extracted features or analyze the image directly
       let features = extractedFeatures;
       if (!features && imagePreview) {
         features = await extractImageFeatures(imagePreview);
         setExtractedFeatures(features);
       }
 
-      // Call the dynamic image-dependent prediction function
+      // Step 3: Analyze Cyclone with validated image features & parameters
       const result = await analyzeCyclone(features || imagePreview, parameters);
       setPrediction(result);
 
-      // Smooth scroll to results
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -157,6 +260,7 @@ export default function App() {
   const handleReset = () => {
     setImagePreview(null);
     setImageName('');
+    setValidationResult(null);
     setExtractedFeatures(null);
     setParameters({
       windSpeed: '',
@@ -166,6 +270,7 @@ export default function App() {
       latitude: '',
       longitude: '',
       rainfall: '',
+      targetRegion: 'Visakhapatnam',
     });
     setPrediction(null);
     if (fileInputRef.current) {
@@ -190,18 +295,18 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
         
-        {/* SATELLITE IMAGE UPLOAD */}
+        {/* SATELLITE IMAGE UPLOAD & VALIDATION */}
         <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
             <h2 className="text-lg sm:text-xl font-bold text-[#3D2B27]">
               Satellite Image Upload
             </h2>
             <span className="text-xs text-[#7A6661] font-medium">
-              JPG, PNG, TIFF, or SVG Satellite Scans
+              Satellite Scans & Weather Radar
             </span>
           </div>
           <p className="text-xs sm:text-sm text-[#7A6661] mb-5">
-            Upload storm imagery. The system analyzes actual image brightness, contrast, and cloud density for prediction.
+            Upload storm imagery. The system automatically inspects whether the image contains a cyclone cloud vortex before running prediction.
           </p>
 
           <input
@@ -213,13 +318,15 @@ export default function App() {
             id="satellite-upload-input"
           />
 
-          {/* Large Upload Box */}
+          {/* Upload Box */}
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-colors flex flex-col items-center justify-center min-h-[220px] ${
               imagePreview
-                ? 'border-[#E98272] bg-[#FAF5EF]/50'
+                ? validationResult?.isValidCycloneImage
+                  ? 'border-[#E98272] bg-[#FAF5EF]/50'
+                  : 'border-[#E29377] bg-[#FFF8F6]'
                 : 'border-[#EADCCE] bg-[#FAF5EF] hover:border-[#E98272]'
             }`}
           >
@@ -228,19 +335,14 @@ export default function App() {
                 <div className="max-w-xs w-full aspect-square rounded-xl overflow-hidden border border-[#EADCCE] bg-white shadow-xs p-1">
                   <img
                     src={imagePreview}
-                    alt="Satellite Preview"
+                    alt="Uploaded Preview"
                     className="w-full h-full object-contain rounded-lg"
                   />
                 </div>
                 <div className="text-center">
                   <p className="text-xs font-bold text-[#3D2B27] truncate max-w-xs">
-                    {imageName || 'Selected Satellite Image'}
+                    {imageName || 'Selected Image'}
                   </p>
-                  {extractedFeatures && (
-                    <p className="text-[11px] text-[#7A6661] mt-0.5">
-                      Extracted: {extractedFeatures.cloudCoverage} cloud cover • {extractedFeatures.brightness} brightness
-                    </p>
-                  )}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -277,12 +379,77 @@ export default function App() {
             )}
           </div>
 
+          {/* VALIDATION STATUS CARD */}
+          {imagePreview && (
+            <div ref={validationSectionRef} className="mt-5">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#EADCCE]">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#7A6661]">
+                  <ShieldCheck className="w-4 h-4 text-[#E98272]" />
+                  <span>Demo Image Validation</span>
+                </div>
+                <span className="text-[11px] text-[#7A6661]">
+                  Step 1: Vortex & Meteorology Gatekeeper
+                </span>
+              </div>
+
+              {isValidating || validationResult?.status === 'checking' ? (
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE] flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-[#E98272] animate-spin shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-[#3D2B27]">
+                      Image Analysis: Checking...
+                    </p>
+                    <p className="text-xs text-[#7A6661] mt-0.5">
+                      Verifying cloud coverage, spiral symmetry, and satellite characteristics.
+                    </p>
+                  </div>
+                </div>
+              ) : validationResult?.isValidCycloneImage ? (
+                <div className="p-4 rounded-xl bg-[#F4F9F4] border border-[#CDE5CD] flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-[#2E7D32] shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-extrabold text-[#1B5E20]">
+                      ✓ Cyclone-like satellite image detected
+                    </p>
+                    <p className="text-xs text-[#386641] mt-0.5">
+                      Cloud spiral structure detected (Vortex Symmetry: {validationResult.features?.spiralStructureScore ?? 0}%, Cloud Coverage: {validationResult.features?.approximateCloudCoverage ?? 0}%). Prediction unlocked.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-[#CDE5CD] text-[11px] font-bold text-[#2E7D32] shrink-0">
+                    Passed
+                  </span>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-[#FFF5F5] border border-[#F5C2C7] space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-[#B02A37] shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-extrabold text-[#842029]">
+                        ⚠️ No Cyclone Detected
+                      </h4>
+                      <p className="text-xs font-semibold text-[#842029] mt-0.5">
+                        Please upload a satellite/weather image containing a tropical cyclone.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-[#7A6661] pt-1 border-t border-[#F5C2C7]/60">
+                    <XCircle className="w-4 h-4 text-[#B02A37] shrink-0" />
+                    <span className="font-medium">
+                      ✕ No cyclone detected in this image &bull; {validationResult?.reason || 'Lacks circular/spiral vortex structure'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Quick Scenario Test Presets */}
-          <div className="mt-5 pt-4 border-t border-[#EADCCE]">
+          <div className="mt-6 pt-4 border-t border-[#EADCCE]">
             <p className="text-xs font-bold text-[#7A6661] mb-2.5">
-              Quick Test Scenarios (Instant image & parameter load):
+              Quick Test Cases (Test Cyclone Detection vs False Positive Rejection):
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {SCENARIO_PRESETS.map((scenario) => (
                 <button
                   key={scenario.id}
@@ -294,9 +461,18 @@ export default function App() {
                       : 'border-[#EADCCE] bg-[#FAF5EF] hover:bg-white text-[#3D2B27]'
                   }`}
                 >
-                  <span className="block font-bold">{scenario.label}</span>
-                  <span className="block text-[11px] text-[#7A6661] mt-0.5">
-                    {scenario.params.windSpeed} km/h • {scenario.params.atmosphericPressure} hPa
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-bold truncate">{scenario.label}</span>
+                  </div>
+                  <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wide ${
+                    scenario.type === 'cyclone'
+                      ? 'bg-[#F4F9F4] text-[#2E7D32] border border-[#CDE5CD]'
+                      : 'bg-[#FFF5F5] text-[#B02A37] border border-[#F5C2C7]'
+                  }`}>
+                    {scenario.type === 'cyclone' ? 'Will Pass' : 'Will Reject'}
+                  </span>
+                  <span className="block text-[11px] text-[#7A6661] mt-1 truncate">
+                    {scenario.params.windSpeed} km/h • {scenario.params.targetRegion}
                   </span>
                 </button>
               ))}
@@ -310,7 +486,7 @@ export default function App() {
             Cyclone Parameters
           </h2>
           <p className="text-xs sm:text-sm text-[#7A6661] mb-6">
-            Enter in-situ meteorological measurements. Values will be fused with the uploaded image analysis.
+            Enter in-situ meteorological measurements and target coastal region for landfall analysis.
           </p>
 
           <form onSubmit={handlePredict} className="space-y-6">
@@ -323,7 +499,7 @@ export default function App() {
                 <input
                   type="number"
                   step="any"
-                  placeholder="e.g. 145"
+                  placeholder="e.g. 85"
                   value={parameters.windSpeed}
                   onChange={(e) => handleInputChange('windSpeed', e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE] text-sm text-[#3D2B27] font-medium focus:outline-none focus:border-[#E98272] focus:ring-1 focus:ring-[#E98272]"
@@ -412,7 +588,7 @@ export default function App() {
               </div>
 
               {/* Rainfall */}
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div>
                 <label className="block text-xs font-bold text-[#3D2B27] mb-1.5">
                   Rainfall (mm)
                 </label>
@@ -426,142 +602,347 @@ export default function App() {
                   required
                 />
               </div>
+
+              {/* Target Coastal Region / City */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-[#3D2B27] mb-1.5">
+                  Target Coastal Region / City (for Landfall Analysis)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Visakhapatnam, Puri, Chennai, Kolkata, Paradip"
+                  value={parameters.targetRegion || ''}
+                  onChange={(e) => handleInputChange('targetRegion', e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE] text-sm text-[#3D2B27] font-medium focus:outline-none focus:border-[#E98272] focus:ring-1 focus:ring-[#E98272]"
+                  required
+                />
+                {/* Popular Region Quick Selection */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-[#7A6661] font-semibold">Quick Select:</span>
+                  {POPULAR_TARGET_REGIONS.map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      onClick={() => handleInputChange('targetRegion', city)}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                        parameters.targetRegion === city
+                          ? 'border-[#E98272] bg-[#E98272] text-white font-bold'
+                          : 'border-[#EADCCE] bg-white text-[#7A6661] hover:bg-[#FAF5EF]'
+                      }`}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons: Predict Cyclone & Reset */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={isAnalyzing}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#E98272] hover:bg-[#D97363] disabled:opacity-75 text-white font-extrabold text-sm sm:text-base shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>{isAnalyzing ? 'Analyzing Inputs...' : 'Predict Cyclone'}</span>
-              </button>
+            <div className="space-y-2 pt-2">
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={isAnalyzing || isValidating || !validationResult?.isValidCycloneImage}
+                  className={`w-full sm:w-auto px-8 py-3.5 rounded-xl font-extrabold text-sm sm:text-base shadow-sm transition-all flex items-center justify-center gap-2 ${
+                    validationResult?.isValidCycloneImage
+                      ? 'bg-[#E98272] hover:bg-[#D97363] text-white cursor-pointer'
+                      : 'bg-[#EADCCE] text-[#7A6661] cursor-not-allowed opacity-80'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>
+                    {isAnalyzing
+                      ? 'Analyzing Inputs...'
+                      : isValidating
+                      ? 'Checking Image...'
+                      : 'Predict Cyclone'}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handleReset}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-[#F5EBE1] text-[#7A6661] font-semibold text-sm border border-[#EADCCE] transition-colors cursor-pointer flex items-center justify-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Reset</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-[#F5EBE1] text-[#7A6661] font-semibold text-sm border border-[#EADCCE] transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset</span>
+                </button>
+              </div>
+
+              {!validationResult?.isValidCycloneImage && imagePreview && (
+                <p className="text-xs text-[#842029] font-medium">
+                  Prediction is disabled because the uploaded image does not contain a verified cyclone cloud structure.
+                </p>
+              )}
+              {!imagePreview && (
+                <p className="text-xs text-[#7A6661] font-medium">
+                  Please upload a satellite cyclone image above to enable prediction.
+                </p>
+              )}
             </div>
           </form>
         </section>
 
-        {/* PREDICTION RESULT & ANALYSIS SECTIONS */}
-        {prediction && (
+        {/* PREDICTION RESULT & ANALYSIS SECTIONS (ONLY DISPLAYED WHEN VALID CYCLONE & PREDICTED) */}
+        {prediction && validationResult?.isValidCycloneImage && (
           <div ref={resultRef} className="space-y-8">
             
-            {/* 1. IMAGE ANALYSIS DETAILS */}
-            <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#EADCCE]">
-                <div className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-[#E98272]" />
-                  <h3 className="text-base sm:text-lg font-bold text-[#3D2B27]">
-                    Image Analysis
-                  </h3>
+            {/* 1. CYCLONE ANALYSIS (Image Analysis + Environmental Analysis) */}
+            <div className="space-y-4">
+              {/* Image Analysis */}
+              <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#EADCCE]">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-[#E98272]" />
+                    <h3 className="text-base sm:text-lg font-bold text-[#3D2B27]">
+                      Image Analysis
+                    </h3>
+                  </div>
+                  <span className="text-xs text-[#7A6661] font-medium">
+                    Optical Feature Extraction
+                  </span>
                 </div>
-                <span className="text-xs text-[#7A6661] font-medium">
-                  Optical Feature Extraction
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Image Brightness
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.imageAnalysis.brightness}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Image Contrast
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.imageAnalysis.contrastStr || `${prediction.imageAnalysis.contrast}%`}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Cloud Coverage Estimate
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.imageAnalysis.cloudCoverage}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Image Quality
+                    </span>
+                    <span className="text-xs sm:text-sm font-extrabold text-[#3D2B27] truncate block">
+                      {prediction.imageAnalysis.imageQuality}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Environmental Analysis */}
+              <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#EADCCE]">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-[#E98272]" />
+                    <h3 className="text-base sm:text-lg font-bold text-[#3D2B27]">
+                      Environmental Analysis
+                    </h3>
+                  </div>
+                  <span className="text-xs text-[#7A6661] font-medium">
+                    In-situ Meteorological Metrics
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Wind Speed
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.environmentalAnalysis.windSpeed}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      SST
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.environmentalAnalysis.sst}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Pressure
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.environmentalAnalysis.pressure}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                    <span className="text-xs font-bold text-[#7A6661] block mb-1">
+                      Rainfall
+                    </span>
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.environmentalAnalysis.rainfall}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* 2. PREDICTED CYCLONE MOVEMENT DIRECTION */}
+            <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-6 border-b border-[#EADCCE]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#FAF5EF] border border-[#EADCCE] flex items-center justify-center text-[#E98272]">
+                    <Compass className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-[#3D2B27]">
+                      Predicted Movement Direction
+                    </h2>
+                    <p className="text-xs text-[#7A6661] mt-0.5">
+                      Estimated track heading & translation forward speed
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-block self-start sm:self-auto px-3 py-1 rounded-full bg-[#FAF5EF] text-[#E98272] border border-[#EADCCE] text-xs font-bold uppercase tracking-wider">
+                  Demo Prediction
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Image Brightness
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Current Location */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Current Location
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.imageAnalysis.brightness}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#E98272]" />
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.movement.currentLocation}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Image Contrast
+                {/* Predicted Direction with Visual Indicator Arrow */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Predicted Direction
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.imageAnalysis.contrast}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl sm:text-2xl font-black text-[#E98272]">
+                      {prediction.movement.arrowSymbol}
+                    </span>
+                    <div>
+                      <span className="text-base sm:text-lg font-extrabold text-[#3D2B27] block">
+                        {prediction.movement.predictedDirection}
+                      </span>
+                      <span className="text-[11px] font-semibold text-[#7A6661]">
+                        Bearing: {prediction.movement.bearingDegrees}°
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Cloud Coverage Estimate
+                {/* Predicted Movement Speed */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Movement Speed
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.imageAnalysis.cloudCoverage}
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Image Quality
-                  </span>
-                  <span className="text-xs sm:text-sm font-extrabold text-[#3D2B27] truncate block">
-                    {prediction.imageAnalysis.imageQuality}
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-4 h-4 text-[#E98272]" />
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.movement.movementSpeed}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-medium text-[#7A6661] block mt-0.5">
+                    Translation velocity
                   </span>
                 </div>
               </div>
             </section>
 
-            {/* 2. ENVIRONMENTAL ANALYSIS DETAILS */}
+            {/* 3. ESTIMATED REGIONAL IMPACT */}
             <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#EADCCE]">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-[#E98272]" />
-                  <h3 className="text-base sm:text-lg font-bold text-[#3D2B27]">
-                    Environmental Analysis
-                  </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-6 border-b border-[#EADCCE]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#FAF5EF] border border-[#EADCCE] flex items-center justify-center text-[#E98272]">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-[#3D2B27]">
+                      Estimated Regional Impact
+                    </h2>
+                    <p className="text-xs text-[#7A6661] mt-0.5">
+                      Target location arrival timeline and proximity assessment
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xs text-[#7A6661] font-medium">
-                  In-situ Meteorological Metrics
+                <span className="inline-block self-start sm:self-auto px-3 py-1 rounded-full bg-[#FAF5EF] text-[#E98272] border border-[#EADCCE] text-xs font-bold uppercase tracking-wider">
+                  Estimated
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Wind Speed
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Target Region */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Target Region
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.environmentalAnalysis.windSpeed}
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    SST
-                  </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.environmentalAnalysis.sst}
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-[#E98272]" />
+                    <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
+                      {prediction.impact.targetRegion}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#7A6661] block mt-0.5">
+                    Coastal Monitoring Zone
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Pressure
+                {/* Distance from Current Location */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Distance from Cyclone
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.environmentalAnalysis.pressure}
+                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27] block">
+                    {prediction.impact.distanceKm}
+                  </span>
+                  <span className="text-[11px] text-[#7A6661] block mt-0.5">
+                    Great-circle radius
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
-                  <span className="text-xs font-bold text-[#7A6661] block mb-1">
-                    Rainfall
+                {/* Estimated Time to Impact */}
+                <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
+                  <span className="text-xs font-bold text-[#7A6661] uppercase tracking-wider block mb-1">
+                    Time to Impact
                   </span>
-                  <span className="text-base sm:text-lg font-extrabold text-[#3D2B27]">
-                    {prediction.environmentalAnalysis.rainfall}
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-[#E98272]" />
+                    <span className="text-base sm:text-lg font-extrabold text-[#E98272]">
+                      {prediction.impact.estimatedHours}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#7A6661] block mt-0.5">
+                    {prediction.impact.impactStatus}
                   </span>
                 </div>
               </div>
+
+              <div className="mt-4 p-3 rounded-xl bg-[#FAF5EF]/60 border border-[#EADCCE] text-[11px] text-[#7A6661]">
+                <strong>Demo Prediction:</strong> Not for operational weather forecasting. All metrics are demonstration estimates.
+              </div>
             </section>
 
-            {/* 3. PREDICTION RESULT */}
+            {/* 4. PREDICTION */}
             <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm relative overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-6 border-b border-[#EADCCE]">
                 <div>
@@ -577,7 +958,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Simple Result Card Items */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Cyclone Status */}
                 <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
@@ -649,7 +1029,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 4. DASHBOARD */}
+            {/* 5. DASHBOARD */}
             <section className="bg-white rounded-2xl p-6 sm:p-8 border border-[#EADCCE] shadow-sm space-y-8">
               <div>
                 <h2 className="text-lg sm:text-xl font-bold text-[#3D2B27]">
@@ -699,13 +1079,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* One Simple Coral Line Chart: Cyclone Intensity Trend */}
+              {/* Simple Coral Line Chart: Cyclone Intensity Trend */}
               <div className="pt-4 border-t border-[#EADCCE]">
                 <h3 className="text-base font-bold text-[#3D2B27] mb-4">
                   Cyclone Intensity Trend
                 </h3>
 
-                {/* Clean Responsive SVG Chart */}
                 <div className="p-4 rounded-xl bg-[#FAF5EF] border border-[#EADCCE]">
                   <div className="w-full overflow-x-auto">
                     <svg viewBox="0 0 500 200" className="w-full min-w-[340px] h-48 select-none">
@@ -796,7 +1175,7 @@ export default function App() {
           CycloVision — Tropical Cyclone Intelligence Prototype
         </p>
         <p className="text-[11px] text-[#7A6661]/80 mt-1">
-          Developed with a Coral & Beige theme • Client-side Demonstration Interface
+          Demo Prediction — Not for operational weather forecasting. Developed with a Coral & Beige theme.
         </p>
       </footer>
     </div>
