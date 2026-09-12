@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-coral-primary: #E98272;
+  --color-coral-light: #F4A095;
+  --color-coral-dark: #C9685B;
+  --color-beige-base: #F3E6D5;
+  --color-beige-light: #FAF4EC;
+  --color-cream: #FFFDF9;
+  --color-brown-dark: #3B2A27;
+  --color-brown-muted: #765F58;
+}
+
+@layer base {
+  body {
+    background-color: #FAF4EC;
+    color: #3B2A27;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Radar pulse and cyclone spin utilities */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse-slow {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 24s linear infinite;
+}
+
+.animate-spin-reverse-slow {
+  animation: spin-reverse-slow 30s linear infinite;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+
+/* Custom scrollbar matching coral & beige */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF4EC;
+}
+::-webkit-scrollbar-thumb {
+  background: #F3E6D5;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E98272;
+}

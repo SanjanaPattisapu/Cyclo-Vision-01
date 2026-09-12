@@ -1,0 +1,7 @@
+{
+  "name": "CycloVision",
+  "description": "AI-Powered Tropical Cyclone Intelligence. Identify, classify, and predict cyclone patterns using satellite imagery and meteorological data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
